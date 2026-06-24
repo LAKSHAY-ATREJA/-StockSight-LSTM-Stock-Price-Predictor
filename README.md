@@ -4,6 +4,8 @@ StockSight is a machine-learning application that predicts short-term stock clos
 
 The app works immediately after installation: an exponential-smoothing + linear-trend fallback predictor is active out of the box. The LSTM model can be trained on demand for any ticker via a single API call or command, after which the richer model is used automatically.
 
+## Live Demo
+[View Live Demo](https://stocksight-lstm-stock-price-predictor.onrender.com)
 ---
 
 ## Model architecture
