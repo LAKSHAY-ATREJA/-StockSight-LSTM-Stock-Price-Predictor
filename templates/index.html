@@ -22,8 +22,22 @@
     --font-mono: 'Space Mono', monospace;
     --font-body: 'DM Sans', sans-serif;
   }
+
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--bg); color: var(--text); font-family: var(--font-body); min-height: 100vh; }
+
+  html {
+    height: 100%;
+    overflow-x: hidden;
+    max-width: 100vw;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    min-height: 100%;
+    overflow-x: hidden;
+  }
 
   /* ── header ── */
   header {
@@ -53,7 +67,11 @@
   .btn.outline:hover { border-color: var(--accent); color: var(--accent); }
 
   /* ── layout ── */
-  main { max-width: 1280px; margin: 0 auto; padding: 2rem 2.5rem; }
+  main {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem 2.5rem;
+  }
 
   /* ── ticker bar ── */
   #ticker-info {
@@ -74,16 +92,28 @@
   .chart-card {
     background: var(--card); border: 1px solid var(--border); border-radius: 16px;
     padding: 1.5rem;
+    min-width: 0;
   }
   .chart-card h2 { font-size: .85rem; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 1.25rem; }
-  canvas { width: 100% !important; }
+
+  /* Chart wrappers — Chart.js with maintainAspectRatio: false needs a parent with explicit height */
+  .chart-wrap {
+    position: relative;
+    height: 400px;
+    width: 100%;
+  }
+  .chart-wrap-sm {
+    position: relative;
+    height: 220px;
+    width: 100%;
+  }
 
   /* ── prediction panel ── */
   #prediction-panel {
     background: var(--card); border: 1px solid var(--border); border-radius: 16px;
     padding: 1.5rem; margin-bottom: 1.5rem;
   }
-  .pred-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; }
+  .pred-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; flex-wrap: wrap; gap: .75rem; }
   .pred-header h2 { font-size: .85rem; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
   .signal-badge {
     font-family: var(--font-mono); font-size: .75rem; font-weight: 700;
@@ -116,6 +146,8 @@
     .charts-grid { grid-template-columns: 1fr; }
     header { padding: 1rem 1.25rem; }
     main   { padding: 1rem 1.25rem; }
+    .chart-wrap { height: 280px; }
+    .chart-wrap-sm { height: 180px; }
   }
 </style>
 </head>
@@ -141,24 +173,30 @@
         <button class="period-btn" onclick="changePeriod(this,'1y')">1Y</button>
         <button class="period-btn" onclick="changePeriod(this,'2y')">2Y</button>
       </div>
-      <canvas id="priceChart" height="260"></canvas>
+      <div class="chart-wrap">
+        <canvas id="priceChart"></canvas>
+      </div>
     </div>
     <div class="chart-card">
       <h2>RSI (14)</h2>
-      <canvas id="rsiChart" height="260"></canvas>
+      <div class="chart-wrap">
+        <canvas id="rsiChart"></canvas>
+      </div>
     </div>
   </div>
 
   <div id="prediction-panel">
     <div class="pred-header">
       <h2>7-Day Forecast</h2>
-      <div style="display:flex;align-items:center;gap:.75rem">
+      <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
         <span id="method-badge" style="font-size:.72rem;color:var(--muted);font-family:var(--font-mono)"></span>
         <span id="signal-badge" class="signal-badge hold">HOLD</span>
         <button class="btn outline" id="train-btn" onclick="trainModel()" style="font-size:.75rem;padding:.3rem .75rem">Train LSTM</button>
       </div>
     </div>
-    <canvas id="predChart" height="160" style="margin-bottom:1.25rem"></canvas>
+    <div class="chart-wrap-sm" style="margin-bottom:1.25rem">
+      <canvas id="predChart"></canvas>
+    </div>
     <table class="pred-table">
       <thead><tr><th>#</th><th>Date</th><th>Predicted Price</th><th>Change</th></tr></thead>
       <tbody id="pred-tbody"><tr><td colspan="4" style="color:var(--muted);text-align:center;padding:1.5rem">Load a ticker to see predictions</td></tr></tbody>
@@ -256,9 +294,23 @@ async function trainModel() {
   }
 }
 
+function yPadded(values) {
+  if (!values || !values.length) return {};
+  const clean = values.filter(v => v != null && !isNaN(v));
+  if (!clean.length) return {};
+  const mn = Math.min(...clean);
+  const mx = Math.max(...clean);
+  const pad = (mx - mn) * 0.05 || mn * 0.05 || 1;
+  return { min: mn - pad, max: mx + pad };
+}
+
 function drawPriceChart(d) {
   if (priceChart) priceChart.destroy();
   const ctx = document.getElementById("priceChart").getContext("2d");
+  const yScale = { ...yPadded([...d.close, ...d.ma7, ...d.ma21].filter(Boolean)),
+    ticks: { color: "#6b6b8a", font: { family: "Space Mono", size: 10 } },
+    grid: { color: "rgba(255,255,255,.05)" }
+  };
   priceChart = new Chart(ctx, {
     type: "line",
     data: {
@@ -270,7 +322,7 @@ function drawPriceChart(d) {
         { label: "MA 21", data: d.ma21,  borderColor: "#fbbf24", borderWidth: 1.5, pointRadius: 0, borderDash: [4,3], tension: 0.3 },
       ]
     },
-    options: chartOpts()
+    options: { ...chartOpts(), scales: { x: chartOpts().scales.x, y: yScale } }
   });
 }
 
@@ -285,11 +337,13 @@ function drawRSIChart(d) {
     },
     options: {
       ...chartOpts(),
-      plugins: { ...chartOpts().plugins, annotation: {} },
       scales: {
         x: chartOpts().scales.x,
-        y: { min: 0, max: 100, ticks: { color: "#6b6b8a", font: { family: "Space Mono", size: 10 } },
-             grid: { color: "rgba(255,255,255,.05)" } }
+        y: {
+          min: 0, max: 100,
+          ticks: { color: "#6b6b8a", font: { family: "Space Mono", size: 10 } },
+          grid: { color: "rgba(255,255,255,.05)" }
+        }
       }
     }
   });
@@ -300,6 +354,10 @@ function drawPredChart(d) {
   const ctx = document.getElementById("predChart").getContext("2d");
   const labels = d.predictions.map(p => p.date);
   const prices  = d.predictions.map(p => p.price);
+  const yScale = { ...yPadded(prices),
+    ticks: { color: "#6b6b8a", font: { family: "Space Mono", size: 10 } },
+    grid: { color: "rgba(255,255,255,.05)" }
+  };
   predChart = new Chart(ctx, {
     type: "bar",
     data: {
@@ -312,7 +370,7 @@ function drawPredChart(d) {
         borderWidth: 1.5, borderRadius: 6,
       }]
     },
-    options: { ...chartOpts(), plugins: { legend: { display: false } } }
+    options: { ...chartOpts(), plugins: { legend: { display: false } }, scales: { x: chartOpts().scales.x, y: yScale } }
   });
 }
 
@@ -333,7 +391,8 @@ function renderPredTable(d) {
 
 function chartOpts() {
   return {
-    responsive: true, maintainAspectRatio: false,
+    responsive: true,
+    maintainAspectRatio: false,
     interaction: { mode: "index", intersect: false },
     plugins: {
       legend: { labels: { color: "#6b6b8a", font: { family: "Space Mono", size: 10 }, boxWidth: 12 } },
@@ -345,10 +404,17 @@ function chartOpts() {
       }
     },
     scales: {
-      x: { ticks: { color: "#6b6b8a", font: { family: "Space Mono", size: 10 }, maxTicksLimit: 8 },
-           grid: { display: false } },
-      y: { ticks: { color: "#6b6b8a", font: { family: "Space Mono", size: 10 } },
-           grid: { color: "rgba(255,255,255,.05)" } }
+      x: {
+        ticks: {
+          color: "#6b6b8a", font: { family: "Space Mono", size: 10 },
+          maxTicksLimit: 8, maxRotation: 0, autoSkip: true
+        },
+        grid: { display: false }
+      },
+      y: {
+        ticks: { color: "#6b6b8a", font: { family: "Space Mono", size: 10 } },
+        grid: { color: "rgba(255,255,255,.05)" }
+      }
     }
   };
 }
